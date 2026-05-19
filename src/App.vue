@@ -142,7 +142,7 @@ const openLink = (url: string) => {
         </h2>
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card class="bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-green-500/50 transition-all hover:-translate-y-1 group cursor-pointer" @click="openLink('https://github.com/Team-Haruki')">
+          <Card class="bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-green-500/50 transition-all hover:-translate-y-1 group cursor-pointer" @click="openLink('https://haruki.seiunx.com/about')">
             <CardHeader>
               <CardTitle class="flex items-center justify-between group-hover:text-green-500 transition-colors text-lg">
                 Project Haruki

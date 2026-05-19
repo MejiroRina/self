@@ -15,7 +15,7 @@ export default {
   },
   projects: {
     title: '开源项目',
-    harukiDevTeamDesc: '专注于 Project Sekai 相关的开源项目开发团队，我目前作为主要开发者之一参与其中。',
+    harukiDevTeamDesc: '这是一个致力于 Project Sekai 相关开源项目的开发团队，我目前作为核心开发者之一深度参与其中。',
   },
   contact: {
     title: '联系我',
