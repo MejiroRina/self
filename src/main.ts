@@ -1,4 +1,6 @@
 import { ViteSSG } from 'vite-ssg/single-page'
+import '@fontsource/maple-mono/latin-400.css'
+import '@fontsource/maple-mono/latin-600.css'
 import './assets/index.css'
 import App from './App.vue'
 import { createI18n } from 'vue-i18n'

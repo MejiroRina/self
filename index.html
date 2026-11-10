@@ -1,10 +1,35 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="星雲希凪（Seiun Kinagi）的个人主页：广州在读大学生，星云网络（Seiunx Network）与 Haruki Dev Team 创始人。" />
+    <meta name="theme-color" content="#0e0f2a" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f2fb" media="(prefers-color-scheme: light)" />
     <title>星雲希凪 (SeiunKinagi)</title>
+    <script>
+      // 在首帧绘制之前运行，避免闪烁：
+      // 1. 标记 JS 可用（进场动画只在有 JS 时才先把内容藏起来）
+      // 2. 提前套用深色主题（键名和取值与 VueUse 的 useDark 一致）
+      // 3. 同一会话里第二次打开、或开启了“减少动态效果”时，跳过开场动画
+      // 4. 访客关掉过背景特效的话，直接不显示星空
+      ;(function () {
+        var root = document.documentElement
+        root.classList.add('js')
+        try {
+          var mode = localStorage.getItem('vueuse-color-scheme')
+          var system = matchMedia('(prefers-color-scheme: dark)').matches
+          if (mode === 'dark' || ((!mode || mode === 'auto') && system)) root.classList.add('dark')
+          if (localStorage.getItem('fx') === 'off') root.dataset.fx = 'off'
+          if (sessionStorage.getItem('booted') || matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            root.dataset.boot = 'skip'
+          } else {
+            sessionStorage.setItem('booted', '1')
+          }
+        } catch (e) {}
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

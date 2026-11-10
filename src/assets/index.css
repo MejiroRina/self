@@ -1,2 +1,240 @@
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
+
+/* 只含「星雲希凪」四个字形的子集（约 2KB），原字体 Shippori Mincho，OFL 许可见 fonts/ 目录。
+   如果改了名字，需要重新生成：pyftsubset <字体文件> --text="新名字" --flavor=woff2 */
+@font-face {
+  font-family: "Shippori Mincho Name";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("./fonts/shippori-mincho-name.woff2") format("woff2");
+}
+
+/* 朝凪：浅色主题 */
+:root {
+  --bg: #f4f2fb;
+  --surface: #ebe7f7;
+  --line: #d3cdea;
+  --ink: #1f1d47;
+  --dim: #615e8c;
+  --mint: #0c7d6f;
+  --rose: #c2427c;
+  --iris: #5a47d1;
+  --boot-delay: 1.5s;
+  color-scheme: light;
+}
+
+/* 星夜：深色主题 */
+.dark {
+  --bg: #0e0f2a;
+  --surface: #171941;
+  --line: #2b2e63;
+  --ink: #ecebfa;
+  --dim: #9a9cc7;
+  --mint: #7fe7cf;
+  --rose: #f08bb8;
+  --iris: #9d8cff;
+  color-scheme: dark;
+}
+
+/* "skip"：开场动画整个跳过；"done"：已经播完，或播放途中被按键打断 */
+html:is([data-boot="skip"], [data-boot="done"]) {
+  --boot-delay: 0s;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-dim: var(--dim);
+  --color-mint: var(--mint);
+  --color-rose: var(--rose);
+  --color-iris: var(--iris);
+
+  --font-mono: "Maple Mono", ui-monospace, "SF Mono", Menlo, Consolas, "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", monospace;
+  --font-display: "Shippori Mincho Name", "Hiragino Mincho ProN", "Yu Mincho", "Songti SC", "Noto Serif CJK JP", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI",
+    sans-serif;
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+    color: var(--ink);
+    scroll-padding-top: 5.5rem;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    font-family: var(--font-mono);
+    font-size: 0.9375rem;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--iris) 35%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--mint);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  a,
+  button {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button {
+    cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* ---------- 终端区块：进入视口时，命令被“敲”出来，随后输出显现 ---------- */
+/* 只有 JS 生效（html.js）时才先隐藏，保证无 JS 时内容照常可读 */
+@media (prefers-reduced-motion: no-preference) {
+  html.js .term:not(.is-in) .term-cmd-text {
+    clip-path: inset(0 100% 0 0);
+  }
+
+  html.js .term:not(.is-in) :is(.term-title, .term-out) {
+    opacity: 0;
+  }
+
+  .term.is-in .term-cmd-text {
+    animation: term-type calc(var(--n) * 32ms) steps(var(--n)) both;
+  }
+
+  .term.is-in :is(.term-title, .term-out) {
+    animation: term-out 0.45s ease-out calc(var(--n) * 32ms + 90ms) both;
+  }
+}
+
+@keyframes term-type {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@keyframes term-out {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------- 目录树：用边框画连接线，比字符拼出来的更整齐 ---------- */
+.tree > li {
+  position: relative;
+  padding: 0.2rem 0 0.2rem 1.6rem;
+}
+
+.tree > li::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0.3rem;
+  border-left: 1px solid var(--line);
+}
+
+.tree > li:last-child::before {
+  bottom: auto;
+  height: calc(0.2rem + 0.85em);
+}
+
+.tree > li::after {
+  content: "";
+  position: absolute;
+  top: calc(0.2rem + 0.85em);
+  left: 0.3rem;
+  width: 0.9rem;
+  border-top: 1px solid var(--line);
+}
+
+/* ---------- 打字机：无 JS 时直接显示全文；有 JS 时全文只用来占位，避免布局跳动 ---------- */
+/* 用 opacity 而不是 visibility，这样读屏软件仍然能读到完整的句子 */
+html.js .typed-full {
+  opacity: 0;
+  user-select: none;
+}
+
+html:not(.js) .typed-live {
+  display: none;
+}
+
+.caret {
+  display: inline-block;
+  width: 0.55em;
+  height: 1.1em;
+  margin-left: 1px;
+  vertical-align: text-bottom;
+  background: var(--mint);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .caret {
+    animation: caret-blink 1.1s steps(1) infinite;
+  }
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* ---------- 主题切换：从按钮位置圆形扩散（View Transitions） ---------- */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* ---------- 小部件 ---------- */
+/* 放在 components 层里，这样 Tailwind 的工具类（比如 max-md:hidden）才能覆盖它们 */
+@layer components {
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.1rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    color: var(--ink);
+    background: color-mix(in oklab, var(--surface) 60%, transparent);
+  }
+
+  .chip-dashed {
+    border-style: dashed;
+    color: var(--dim);
+    background: transparent;
+  }
+
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 0.4rem;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font-size: 0.75rem;
+    line-height: 1.5rem;
+    color: var(--dim);
+  }
+}

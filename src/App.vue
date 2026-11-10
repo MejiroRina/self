@@ -1,265 +1,184 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { useDark, useToggle } from '@vueuse/core'
+import { computed, nextTick, onMounted, ref, type Component } from 'vue'
+import { useHead } from '@unhead/vue'
+import { useDark, useEventListener } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
-import { Moon, Sun, Languages, Github, Mail, MapPin, Terminal, Tv, MessageCircle } from 'lucide-vue-next'
 
-import { Button } from '@/components/ui/button'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import BootSequence from '@/components/BootSequence.vue'
+import CommandPalette from '@/components/CommandPalette.vue'
+import HeroSection from '@/components/HeroSection.vue'
+import SiteHeader from '@/components/SiteHeader.vue'
+import SkyBackground from '@/components/SkyBackground.vue'
+import TermSection from '@/components/TermSection.vue'
+import TreeNav from '@/components/TreeNav.vue'
+import AboutSection from '@/components/sections/AboutSection.vue'
+import ActivitySection from '@/components/sections/ActivitySection.vue'
+import ContactSection from '@/components/sections/ContactSection.vue'
+import HistorySection from '@/components/sections/HistorySection.vue'
+import ProjectsSection from '@/components/sections/ProjectsSection.vue'
+import SkillsSection from '@/components/sections/SkillsSection.vue'
+import { useFx } from '@/composables/useFx'
+import { copyText, useToast } from '@/composables/useToast'
+import { sections, site, type SectionId } from '@/data/site'
 
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-
-const isDark = useDark()
-const toggleDark = useToggle(isDark)
-const { t, locale } = useI18n()
-
-const skills = ['Python', 'TypeScript', 'Vue.js', 'Go']
-const learning = ['Rust']
-
-// Typewriter effect
-const displayedSlogan = ref('')
-const isTyping = ref(true)
-
-let typewriterTimeout: ReturnType<typeof setTimeout> | null = null
-
-const typeWriter = (text: string, i = 0) => {
-  if (i === 0) {
-    displayedSlogan.value = ''
-    isTyping.value = true
-    if (typewriterTimeout) clearTimeout(typewriterTimeout)
-  }
-  
-  if (i < text.length) {
-    displayedSlogan.value += text.charAt(i)
-    typewriterTimeout = setTimeout(() => typeWriter(text, i + 1), 100)
-  } else {
-    isTyping.value = false
-  }
+const views: Record<SectionId, Component> = {
+  about: AboutSection,
+  skills: SkillsSection,
+  projects: ProjectsSection,
+  activity: ActivitySection,
+  history: HistorySection,
+  contact: ContactSection,
 }
 
-onMounted(() => {
-  typeWriter(t('hero.slogan'))
-})
+const { t, locale } = useI18n()
+const isDark = useDark()
+const toast = useToast()
+const fx = useFx()
+const paletteOpen = ref(false)
+const modKey = ref('⌘')
 
-watch(locale, () => {
-  typeWriter(t('hero.slogan'))
-})
+// ---------- 语言 ----------
+const LOCALE_KEY = 'locale'
 
 const toggleLocale = () => {
   locale.value = locale.value === 'zh' ? 'en' : 'zh'
+  try {
+    localStorage.setItem(LOCALE_KEY, locale.value)
+  } catch {
+    // 隐私模式下可能写不了，忽略即可
+  }
 }
 
-const openLink = (url: string) => {
-  window.open(url, '_blank')
+// <html lang> 交给 unhead 管：预渲染时写进静态 HTML，切换语言时在浏览器里跟着变
+useHead({ htmlAttrs: { lang: computed(() => (locale.value === 'zh' ? 'zh-CN' : 'en')) } })
+
+onMounted(() => {
+  if (!/Mac|iPhone|iPad/.test(navigator.platform)) modKey.value = 'Ctrl'
+
+  // 预渲染的 HTML 是中文；访客选过语言就用选过的，否则浏览器不是中文环境时切到英文
+  let saved: string | null = null
+  try {
+    saved = localStorage.getItem(LOCALE_KEY)
+  } catch {
+    // 同上
+  }
+  const preferred = saved ?? (navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en')
+  if (preferred === 'zh' || preferred === 'en') locale.value = preferred
+})
+
+// ---------- 主题：从点击位置圆形扩散 ----------
+const toggleTheme = (event?: MouseEvent) => {
+  const next = !isDark.value
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduce || !('startViewTransition' in document)) {
+    isDark.value = next
+    return
+  }
+
+  const x = event?.clientX ?? window.innerWidth / 2
+  const y = event?.clientY ?? window.innerHeight / 2
+  const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y))
+
+  const transition = document.startViewTransition(async () => {
+    isDark.value = next
+    await nextTick()
+  })
+  transition.ready
+    .then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0 at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
+        { duration: 520, easing: 'ease-in-out', pseudoElement: '::view-transition-new(root)' },
+      )
+    })
+    .catch(() => {
+      // 过渡被打断（比如连点两次）时不需要处理
+    })
 }
+
+// ---------- 背景特效开关 ----------
+const toggleFx = () => {
+  toast.show(t(fx.toggle() ? 'fx.on' : 'fx.off'))
+}
+
+// ---------- 命令面板 ----------
+const copyEmail = async () => {
+  toast.show((await copyText(site.email)) ? t('contact.copied', { value: site.email }) : site.email)
+}
+
+useEventListener('keydown', (e: KeyboardEvent) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    paletteOpen.value = !paletteOpen.value
+    return
+  }
+  const target = e.target as HTMLElement | null
+  const typing = target?.matches?.('input, textarea, [contenteditable="true"]')
+  if (e.key === '/' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    e.preventDefault()
+    paletteOpen.value = true
+  }
+})
 </script>
 
 <template>
-  <div class="flex flex-col min-h-screen bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 font-sans transition-colors duration-300">
-    <!-- Navbar -->
-    <header class="fixed top-0 w-full backdrop-blur-md bg-white/50 dark:bg-zinc-950/50 border-b border-zinc-200 dark:border-zinc-800 z-50">
-      <div class="container mx-auto px-4 h-16 flex items-center justify-between">
-        <div class="flex items-center gap-2 font-mono font-bold text-lg">
-          <Terminal class="w-5 h-5 text-green-500" />
-          <span>~/SeiunKinagi</span>
-        </div>
-        
-        <div class="flex items-center gap-4">
-          <Button variant="ghost" size="icon" @click="toggleLocale()" title="Toggle Language">
-            <Languages class="w-5 h-5" />
-          </Button>
+  <div class="flex min-h-svh flex-col">
+    <SkyBackground />
+    <BootSequence />
 
-          <Button variant="ghost" size="icon" @click="toggleDark()" title="Toggle Theme">
-            <Sun v-if="!isDark" class="w-5 h-5" />
-            <Moon v-else class="w-5 h-5" />
-          </Button>
+    <SiteHeader :mod-key="modKey" @palette="paletteOpen = true" @locale="toggleLocale" @fx="toggleFx" @theme="toggleTheme" />
+
+    <main class="flex-1">
+      <HeroSection :mod-key="modKey" @palette="paletteOpen = true" />
+
+      <div class="mx-auto grid w-full max-w-5xl gap-x-14 px-5 pt-8 pb-28 sm:px-8 lg:grid-cols-[10rem_minmax(0,1fr)]">
+        <TreeNav class="max-lg:hidden" />
+
+        <div class="flex max-w-[44rem] flex-col gap-24">
+          <TermSection v-for="s in sections" :id="s.id" :key="s.id" :cmd="s.cmd" :title="t(`sections.${s.id}`)">
+            <component :is="views[s.id]" />
+          </TermSection>
         </div>
       </div>
-    </header>
-
-    <!-- Main Content -->
-    <main class="flex-1 w-full container mx-auto px-4 pt-32 pb-16 max-w-4xl flex flex-col justify-center">
-      <!-- Hero Section -->
-      <section class="flex flex-col md:flex-row items-center md:items-start gap-8 mb-20 animate-fade-in">
-        <div class="relative group">
-          <div class="absolute -inset-0.5 bg-gradient-to-r from-green-500 to-blue-500 rounded-full blur opacity-50 group-hover:opacity-75 transition duration-500"></div>
-          <Avatar class="w-32 h-32 border-2 border-zinc-950 relative">
-            <AvatarImage src="https://avatars.githubusercontent.com/u/70424266?v=4" alt="@MejiroRina" />
-            <AvatarFallback>SK</AvatarFallback>
-          </Avatar>
-        </div>
-        
-        <div class="text-center md:text-left flex-1 space-y-4">
-          <h1 class="text-4xl md:text-5xl font-bold tracking-tight">{{ t('hero.name') }}</h1>
-          <p class="text-xl text-zinc-500 dark:text-zinc-400 font-medium">{{ t('hero.role') }}</p>
-          
-          <div class="inline-flex items-center gap-2 text-zinc-600 dark:text-zinc-300 font-mono bg-zinc-100 dark:bg-zinc-900 px-4 py-2 rounded-md border border-zinc-200 dark:border-zinc-800">
-            <span class="text-green-500">❯</span>
-            <span>{{ displayedSlogan }}<span v-if="isTyping" class="animate-pulse">_</span></span>
-          </div>
-          
-          <div class="flex items-center justify-center md:justify-start gap-2 text-zinc-500 pt-2">
-            <MapPin class="w-4 h-4" />
-            <span>{{ t('hero.location') }}</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Skills Section -->
-      <section class="mb-20">
-        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-          <span class="text-green-500">#</span>
-          {{ t('skills.title') }}
-        </h2>
-        
-        <div class="flex flex-wrap gap-3">
-          <Badge v-for="skill in skills" :key="skill" variant="secondary" class="text-sm py-1 px-3 font-mono border-zinc-200 dark:border-zinc-800">
-            {{ skill }}
-          </Badge>
-          
-          <TooltipProvider v-for="item in learning" :key="item">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Badge variant="outline" class="cursor-help text-sm py-1 px-3 font-mono border-dashed border-zinc-400 dark:border-zinc-600">
-                  {{ item }} ({{ t('skills.learning') }})
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Learning...</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        </div>
-      </section>
-
-      <!-- Projects Section -->
-      <section class="mb-20">
-        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-          <span class="text-green-500">#</span>
-          {{ t('projects.title') }}
-        </h2>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card class="bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-green-500/50 transition-all hover:-translate-y-1 group cursor-pointer" @click="openLink('https://haruki.seiunx.com/about')">
-            <CardHeader>
-              <CardTitle class="flex items-center justify-between group-hover:text-green-500 transition-colors text-lg">
-                Project Haruki
-                <Github class="w-5 h-5" />
-              </CardTitle>
-              <CardDescription class="text-zinc-500">By Haruki Dev Team</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p class="text-sm text-zinc-600 dark:text-zinc-300">
-                {{ t('projects.harukiDevTeamDesc') }}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-      <!-- Contact Section -->
-      <section class="mb-20 animate-fade-in" style="animation-delay: 0.3s; animation-fill-mode: both;">
-        <h2 class="text-2xl font-bold mb-6 flex items-center gap-2">
-          <span class="text-green-500">#</span>
-          {{ t('contact.title') }}
-        </h2>
-        
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <!-- GitHub -->
-          <Card class="bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-green-500/50 transition-all hover:-translate-y-1 group cursor-pointer" @click="openLink('https://github.com/MejiroRina')">
-            <CardHeader class="flex flex-row items-center gap-4 py-4">
-              <div class="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-xl group-hover:text-green-500 transition-colors">
-                <Github class="w-6 h-6" />
-              </div>
-              <div class="flex-1">
-                <CardTitle class="text-lg">GitHub</CardTitle>
-                <CardDescription class="text-zinc-500">星雲希凪 / @MejiroRina</CardDescription>
-              </div>
-            </CardHeader>
-          </Card>
-          
-          <!-- Bilibili -->
-          <Card class="bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-green-500/50 transition-all hover:-translate-y-1 group cursor-pointer" @click="openLink('https://space.bilibili.com/12654527')">
-            <CardHeader class="flex flex-row items-center gap-4 py-4">
-              <div class="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-xl group-hover:text-green-500 transition-colors">
-                <Tv class="w-6 h-6" />
-              </div>
-              <div class="flex-1">
-                <CardTitle class="text-lg">Bilibili</CardTitle>
-                <CardDescription class="text-zinc-500">云はるか / UID: 12654527</CardDescription>
-              </div>
-            </CardHeader>
-          </Card>
-          
-          <!-- Discord -->
-          <Card class="bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-green-500/50 transition-all hover:-translate-y-1 group cursor-pointer" @click="openLink('https://discord.com/users/seiun_kinagi')">
-            <CardHeader class="flex flex-row items-center gap-4 py-4">
-              <div class="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-xl group-hover:text-green-500 transition-colors">
-                <MessageCircle class="w-6 h-6" />
-              </div>
-              <div class="flex-1">
-                <CardTitle class="text-lg">Discord</CardTitle>
-                <CardDescription class="text-zinc-500">星雲希凪 / @seiun_kinagi</CardDescription>
-              </div>
-            </CardHeader>
-          </Card>
-          
-          <!-- Email -->
-          <Card class="bg-zinc-50 dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-green-500/50 transition-all hover:-translate-y-1 group cursor-pointer" @click="openLink('mailto:seiun@seiun.io')">
-            <CardHeader class="flex flex-row items-center gap-4 py-4">
-              <div class="p-3 bg-zinc-200 dark:bg-zinc-800 rounded-xl group-hover:text-green-500 transition-colors">
-                <Mail class="w-6 h-6" />
-              </div>
-              <div class="flex-1">
-                <CardTitle class="text-lg">Email</CardTitle>
-                <CardDescription class="text-zinc-500">seiun@seiun.io</CardDescription>
-              </div>
-            </CardHeader>
-          </Card>
-        </div>
-      </section>
     </main>
 
-    <!-- Footer / Socials -->
-    <footer class="border-t border-zinc-200 dark:border-zinc-800 bg-white/50 dark:bg-zinc-950/50 backdrop-blur-sm mt-auto py-8">
-      <div class="container mx-auto px-4 flex flex-col items-center justify-center gap-4">
-        <div class="flex items-center gap-4">
-          <Button variant="outline" size="icon" class="rounded-full" asChild>
-            <a href="https://github.com/MejiroRina" target="_blank" rel="noopener noreferrer">
-              <Github class="w-5 h-5" />
-            </a>
-          </Button>
-          <Button variant="outline" size="icon" class="rounded-full" asChild>
-            <a href="https://space.bilibili.com/12654527" target="_blank" rel="noopener noreferrer" title="Bilibili">
-              <Tv class="w-5 h-5" />
-            </a>
-          </Button>
-          <Button variant="outline" size="icon" class="rounded-full" asChild>
-            <a href="https://discord.com/users/seiun_kinagi" target="_blank" rel="noopener noreferrer" title="Discord">
-              <MessageCircle class="w-5 h-5" />
-            </a>
-          </Button>
-          <Button variant="outline" size="icon" class="rounded-full" asChild>
-            <a href="mailto:seiun@seiun.io">
-              <Mail class="w-5 h-5" />
-            </a>
-          </Button>
-        </div>
-        <p class="text-sm text-zinc-500 font-mono">
-          © 2026 SeiunKinagi. All rights reserved.
-        </p>
+    <footer class="border-t border-line">
+      <div
+        class="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-1 px-5 py-8 text-[13px] text-dim sm:px-8"
+      >
+        <p>© 2026 SeiunKinagi</p>
+        <p>{{ t('footer.built') }}</p>
       </div>
     </footer>
+
+    <CommandPalette
+      v-model:open="paletteOpen"
+      @theme="toggleTheme()"
+      @locale="toggleLocale"
+      @fx="toggleFx"
+      @copy-email="copyEmail"
+    />
+
+    <div class="pointer-events-none fixed inset-x-0 bottom-6 z-[60] flex justify-center px-4" role="status">
+      <Transition name="toast">
+        <p v-if="toast.message.value" class="rounded-md border border-line bg-surface px-4 py-2 text-[13px] shadow-lg">
+          {{ toast.message.value }}
+        </p>
+      </Transition>
+    </div>
   </div>
 </template>
 
 <style>
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+.toast-enter-active,
+.toast-leave-active {
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
 }
-.animate-fade-in {
-  animation: fade-in 0.8s ease-out forwards;
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 </style>
